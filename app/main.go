@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,28 +11,38 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/julienschmidt/httprouter"
 )
 
-func newRouter() *httprouter.Router {
+func newRouter(ytApiKey string, ytId string) *httprouter.Router {
 	mux := httprouter.New()
 
-	mux.GET("/youtube/channel/stats", getChannelStats())
+	if ytApiKey == "" {
+		log.Fatal("youtube API key no provider")
+	}
+
+	mux.GET("/youtube/channel/stats", getChannelStats(ytApiKey, ytId))
 
 	return mux
 }
 
-func getChannelStats() httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		w.Write([]byte("response!"))
+func main() {
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatal("❌ Could not load .env file:", err)
+	} else {
+		log.Println("✅ .env file loaded successfully")
 	}
 
-}
+	ytApiKey := os.Getenv("YOUTUBE_API_KEY")
+	ytId := os.Getenv("YOUTUBE_ID")
+	fmt.Println("API KEY FROM ENV:", ytApiKey)
+	fmt.Println("YOUTUBE USER ID:", ytId)
 
-func main() {
 	srv := &http.Server{
 		Addr:    ":10101",
-		Handler: newRouter(),
+		Handler: newRouter(ytApiKey, ytId),
 	}
 
 	idleConnsClosed := make(chan struct{})
