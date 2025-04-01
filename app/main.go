@@ -18,27 +18,29 @@ import (
 func newRouter(ytApiKey string, ytId string) *httprouter.Router {
 	mux := httprouter.New()
 
-	if ytApiKey == "" {
-		log.Fatal("youtube API key no provider")
-	}
-
 	mux.GET("/youtube/channel/stats", getChannelStats(ytApiKey, ytId))
-
 	return mux
 }
 
 func main() {
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Fatal("❌ Could not load .env file:", err)
-	} else {
-		log.Println("✅ .env file loaded successfully")
+	// ✅ Load .env only in dev (not production/docker)
+	if os.Getenv("GO_ENV") != "production" {
+		if err := godotenv.Load(".env"); err != nil {
+			log.Println("⚠️  .env file not found, continuing without it")
+		} else {
+			log.Println("✅ .env file loaded successfully")
+		}
 	}
 
 	ytApiKey := os.Getenv("YOUTUBE_API_KEY")
 	ytId := os.Getenv("YOUTUBE_ID")
-	fmt.Println("API KEY FROM ENV:", ytApiKey)
-	fmt.Println("YOUTUBE USER ID:", ytId)
+
+	if ytApiKey == "" || ytId == "" {
+		log.Fatal("❌ Missing required environment variables. Make sure YOUTUBE_API_KEY and YOUTUBE_ID are set.")
+	}
+
+	fmt.Println("📺 API KEY FROM ENV:", ytApiKey)
+	fmt.Println("📺 YOUTUBE USER ID:", ytId)
 
 	srv := &http.Server{
 		Addr:    ":10101",
@@ -48,32 +50,27 @@ func main() {
 	idleConnsClosed := make(chan struct{})
 	go func() {
 		sigint := make(chan os.Signal, 1)
-		signal.Notify(sigint, os.Interrupt)
-		signal.Notify(sigint, syscall.SIGTERM)
+		signal.Notify(sigint, os.Interrupt, syscall.SIGTERM)
 		<-sigint
 
-		log.Println("service interupt received")
+		log.Println("🚦 Shutdown signal received, exiting...")
 
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Printf("http server shutdown error: %v", err)
+			log.Printf("❌ HTTP server Shutdown Error: %v", err)
 		}
 
-		log.Println("shutdown complete")
+		log.Println("✅ Shutdown complete")
 		close(idleConnsClosed)
-
 	}()
 
-	log.Print("Starting server on port 10101")
-	if err := srv.ListenAndServe(); err != nil {
-		if !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("fatal http server failed to start: %v", err)
-		}
+	log.Println("🚀 Starting server on port 10101")
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatalf("❌ Fatal server error: %v", err)
 	}
 
 	<-idleConnsClosed
-	log.Println("Service Stop")
-
+	log.Println("👋 Server stopped")
 }

@@ -20,51 +20,45 @@ type YoutubeStats struct {
 
 func getChannelStats(k string, id string) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		// w.Write([]byte("response!"))
+		fmt.Println("🔑 API Key:", k)
+		fmt.Println("📺 Channel ID:", id)
+
 		ctx := context.Background()
 		yts, err := youtube.NewService(ctx, option.WithAPIKey(k))
 		if err != nil {
-			// fmt.Println("failed to create service")
-			w.WriteHeader((http.StatusBadRequest))
+			fmt.Println("❌ Failed to create YouTube service:", err)
+			http.Error(w, "Failed to connect to YouTube service", http.StatusInternalServerError)
 			return
 		}
 
 		call := yts.Channels.List([]string{"snippet,contentDetails,statistics"})
 		response, err := call.Id(id).Do()
 		if err != nil {
-			// fmt.Println(err)
-			w.WriteHeader((http.StatusBadRequest))
+			fmt.Println("❌ YouTube API error:", err)
+			http.Error(w, "Failed to fetch channel stats", http.StatusBadRequest)
 			return
 		}
 
-		var yt YoutubeStats
-		fmt.Println(response.Items[0].Snippet.Title)
-		if len(response.Items) > 0 {
-			val := response.Items[0]
-			yt := YoutubeStats{
-				Subscriber:  int(val.Statistics.SubscriberCount),
-				ChannelName: val.Snippet.Title,
-				Views:       int(val.Statistics.ViewCount),
-			}
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			if err := json.NewEncoder(w).Encode(yt); err != nil {
-				w.WriteHeader((http.StatusBadRequest))
-				return
-			}
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
+		if len(response.Items) == 0 {
+			fmt.Println("❌ No channel found with that ID")
+			http.Error(w, "Channel not found", http.StatusNotFound)
 			return
+		}
+
+		val := response.Items[0]
+		fmt.Println("✅ Channel Found:", val.Snippet.Title)
+
+		yt := YoutubeStats{
+			Subscriber:  int(val.Statistics.SubscriberCount),
+			ChannelName: val.Snippet.Title,
+			Views:       int(val.Statistics.ViewCount),
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(yt); err != nil {
-			// panic(err)
-			w.WriteHeader((http.StatusBadRequest))
+			fmt.Println("❌ Failed to encode response:", err)
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 			return
 		}
 	}
-
 }
